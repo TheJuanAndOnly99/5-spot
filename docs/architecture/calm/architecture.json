@@ -611,6 +611,19 @@
               }
             }
           ]
+        },
+        "annotation-write-authority": {
+          "description": "The 5spot.finos.org/kata-config-ref annotation is an instruction, not data: a privileged agent acts on it by writing the host filesystem and restarting a host unit. Both node agents hold nodes patch cluster-wide because RBAC cannot express the Node a pod runs on, so a compromised agent could otherwise retarget a different node and move laterally through the control plane. A ValidatingAdmissionPolicy on the workload cluster rejects any Node UPDATE that changes this key when request.userInfo.username is one of the agent ServiceAccounts, comparing object against oldObject so their own kata-config-applied writes still pass (ADR 0013). failurePolicy Fail. It bounds the agents, not every holder of nodes patch - that residual stays recorded in the threat model.",
+          "requirements": [
+            {
+              "requirement-url": "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final",
+              "config": {
+                "framework": "NIST SP 800-53 Rev. 5",
+                "controls": ["AC-3", "AC-6", "SI-10"],
+                "evidence": "deploy/admission/kata-config-annotation-policy.yaml, docs/adr/0013-kata-config-ref-annotation-admission-policy.md"
+              }
+            }
+          ]
         }
       }
     },
@@ -1022,6 +1035,7 @@
     "../../adr/0003-in-pod-host-service-restart-via-nsenter.md",
     "../../adr/0006-pluggable-spot-schedule-provider-contract.md",
     "../../adr/0009-unify-schedule-as-provider-reference.md",
-    "docs/adr/0012-kata-agent-validates-its-own-input.md"
+    "docs/adr/0012-kata-agent-validates-its-own-input.md",
+    "docs/adr/0013-kata-config-ref-annotation-admission-policy.md"
   ]
 }

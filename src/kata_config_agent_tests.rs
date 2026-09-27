@@ -478,6 +478,101 @@ mod tests {
         assert_eq!(argv.last().unwrap(), "k0scontroller.service");
     }
 
+    // ---- the shipped VAP that protects this agent's input (ADR 0013) ----
+    //
+    // The policy hardcodes the annotation key and the agent ServiceAccount
+    // names. Nothing but this test stops a rename in constants.rs from leaving
+    // the policy matching a key that no longer exists — a silently open
+    // boundary. Same class of drift as ADR 0041's comment that claimed a
+    // namespace scope the YAML did not grant.
+
+    #[test]
+    fn test_kata_annotation_policy_manifest_matches_the_constants() {
+        use serde::Deserialize as _;
+
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/deploy/admission/kata-config-annotation-policy.yaml"
+        );
+        let raw = std::fs::read_to_string(path)
+            .expect("the policy protecting kata-config-ref must ship in deploy/admission/");
+
+        let docs: Vec<serde_yaml::Value> = serde_yaml::Deserializer::from_str(&raw)
+            .map(|d| serde_yaml::Value::deserialize(d).expect("each YAML document parses"))
+            .collect();
+        assert_eq!(docs.len(), 2, "expected a policy and its binding");
+
+        let kind = |d: &serde_yaml::Value| d["kind"].as_str().unwrap_or_default().to_string();
+        let policy = docs
+            .iter()
+            .find(|d| kind(d) == "ValidatingAdmissionPolicy")
+            .expect("a ValidatingAdmissionPolicy document");
+        let binding = docs
+            .iter()
+            .find(|d| kind(d) == "ValidatingAdmissionPolicyBinding")
+            .expect("a ValidatingAdmissionPolicyBinding document");
+
+        // The boundary must not open when the policy cannot be evaluated.
+        assert_eq!(
+            policy["spec"]["failurePolicy"].as_str(),
+            Some("Fail"),
+            "failurePolicy must be Fail, like every other policy in deploy/admission/"
+        );
+
+        // It guards Node updates, and only updates: a CREATE carries no
+        // oldObject to compare against.
+        let rule = &policy["spec"]["matchConstraints"]["resourceRules"][0];
+        let has = |v: &serde_yaml::Value, needle: &str| {
+            v.as_sequence()
+                .is_some_and(|xs| xs.iter().any(|x| x.as_str() == Some(needle)))
+        };
+        assert!(
+            has(&rule["resources"], "nodes"),
+            "must match nodes: {rule:?}"
+        );
+        assert!(
+            has(&rule["operations"], "UPDATE"),
+            "must match UPDATE: {rule:?}"
+        );
+
+        // The binding enforces, and points at this policy.
+        assert_eq!(
+            binding["spec"]["policyName"].as_str(),
+            policy["metadata"]["name"].as_str(),
+            "the binding must name this policy"
+        );
+        assert!(
+            has(&binding["spec"]["validationActions"], "Deny"),
+            "the binding must Deny, not only Audit"
+        );
+
+        // The drift guard: the strings the policy hardcodes must be the ones
+        // the code uses.
+        assert!(
+            raw.contains(crate::constants::KATA_CONFIG_REF_ANNOTATION),
+            "the policy must name the annotation constant verbatim: {}",
+            crate::constants::KATA_CONFIG_REF_ANNOTATION
+        );
+        assert!(
+            raw.contains("request.userInfo.username"),
+            "identity for a Node update comes from the requester, not a pod spec"
+        );
+        for sa in [
+            "system:serviceaccount:5spot-system:5spot-kata-config-agent",
+            "system:serviceaccount:5spot-system:5spot-reclaim-agent",
+        ] {
+            assert!(raw.contains(sa), "the policy must deny {sa}");
+        }
+
+        // The agents' own applied-hash writes must keep working, so the
+        // expression has to compare against oldObject rather than reject any
+        // Node update from an agent.
+        assert!(
+            raw.contains("oldObject"),
+            "the policy must compare object against oldObject so kata-config-applied still passes"
+        );
+    }
+
     // ---- intended_hash_for: outcome → the hash we record/guard on ----
 
     #[test]
