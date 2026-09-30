@@ -53,3 +53,12 @@ description: chronological action log per session, consolidated weekly
 | 14:31 | Edited .github/community/01-decisions.md | inline fix | ~64 |
 | 14:31 | Edited .claude/CHANGELOG.md | expanded (+35 lines) | ~454 |
 | 01:35 | Closed roadmap 04: removed hyper+tower from Cargo.toml, moved http-body-util to dev-deps (runtime deps 25→22); verified check/fmt/clippy/test (708 passed); flipped 04 header + ROADMAPS.md + community README rows to ✅; struck O-001 in 01-decisions | Cargo.toml, Cargo.lock, .github/community/{04-dependency-internalization-matrix,01-decisions,README}.md, ROADMAPS.md, .claude/CHANGELOG.md | hyper/tower now kube-client transitives only | ~6000 |
+| 22:15 | Edited .github/dependabot.yml | expanded (+7 lines) | ~174 |
+| 22:16 | Edited .claude/CHANGELOG.md | expanded (+30 lines) | ~344 |
+| 09:45 | Fixed dependabot PRs: diagnosed CodeQL init/analyze 4.38.0-vs-4.38.1 mismatch on PRs 173/174 (172 passed, unpaired); re-pinned all 6 codeql-action refs to 4.38.1 across 4 workflows; added github/codeql-action/* to actions-routine group (bare pattern never matched sub-actions); changelog entry | .github/workflows/{codeql,sast,scorecard,build}.yaml, .github/dependabot.yml, .claude/CHANGELOG.md | PRs 170/171 green, leave for auto-merge; 172-174 to be superseded | ~5000 |
+| 06:55 | Edited .github/scripts/admission-deny.bats | 4→9 lines | ~125 |
+| 06:56 | Edited .claude/CHANGELOG.md | expanded (+27 lines) | ~314 |
+| 12:15 | PR 175 kind job round four: awaited policy denial aborted errexit'd setup_file at the bare out=$(patch_annotation) assignment; added || true (load-bearing comment); bats parses 5 tests | .github/scripts/admission-deny.bats, .claude/CHANGELOG.md, .wolf/buglog.json | previous fix (stderr/can-i) confirmed working — setup now reaches the probe loop | ~2500 |
+| 07:55 | Edited .github/scripts/admission-deny.bats | modified patch_annotation() | ~191 |
+| 07:55 | Edited .claude/CHANGELOG.md | expanded (+30 lines) | ~358 |
+| 13:05 | PR 175 round five: patch_annotation broke its own -p JSON on quoted values (kubectl parse error, no request sent) — 4/5 tests failed while quote-free values passed; escape quotes in helper; validated escaped/unescaped with json.load; bats parses 5 | .github/scripts/admission-deny.bats, .claude/CHANGELOG.md, .wolf/buglog.json | setup fully green since round four; this was the first run where tests executed | ~3000 |

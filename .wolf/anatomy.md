@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-09-27T18:31:34.046Z
-> Files: 304 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-09-29T11:55:35.452Z
+> Files: 305 tracked | Anatomy hits: 0 | Misses: 0
 
 > Project structure index. Auto-maintained by OpenWolf hooks and daemon.
 > Run `openwolf scan` to generate, or wait for the first Claude Code session.
@@ -32,7 +32,7 @@
 
 ## .claude/
 
-- `CHANGELOG.md` — Changelog (~89492 tok)
+- `CHANGELOG.md` — Changelog (~94311 tok)
 - `CLAUDE.md` — Project Instructions for Claude Code (~5648 tok)
 - `settings.json` (~88 tok)
 - `settings.local.json` (~2279 tok)
@@ -51,7 +51,7 @@
 
 - `CODE_OF_CONDUCT.md` — Code of Conduct for 5 Spot Machine Scheduler (~33 tok)
 - `dco.yml` — SPDX-License-Identifier: Apache-2.0 (~70 tok)
-- `dependabot.yml` — /*.yaml — those pin our OWN ghcr.io/finos/5-spot* images to (~1671 tok)
+- `dependabot.yml` — /*.yaml — those pin our OWN ghcr.io/finos/5-spot* images to (~1805 tok)
 - `PULL_REQUEST_TEMPLATE.md` (~85 tok)
 
 ## .github/ISSUE_TEMPLATE/
@@ -86,6 +86,7 @@
 
 ## .github/scripts/
 
+- `admission-deny.bats` — shellcheck shell=bats (~2542 tok)
 - `calm-args.bats` — SPDX-License-Identifier: Apache-2.0 (~1775 tok)
 - `calm-args.sh` — SPDX-License-Identifier: Apache-2.0 (~788 tok)
 

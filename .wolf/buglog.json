@@ -6,7 +6,59 @@
       "error_message": "PR #164 CI failed: cargo-deny 'error[vulnerability]: TLS 1.3 handshake messages incorrectly accepted across encryption level boundaries' (RUSTSEC-2026-0285) and Security Vulnerability Scan (cargo audit) exit 1 on the same advisory",
       "root_cause": "Cargo.lock pinned rustls v0.23.44 (transitive: kube client -> hyper-rustls -> rustls), which is below the RUSTSEC-2026-0285 / GHSA-2mjx-qc3c-rqvc fix version 0.23.45",
       "fix": "cargo update -p rustls (0.23.44 -> 0.23.45, lockfile-only); verified with `cargo deny check advisories` -> ok; changelog entry added",
-      "tags": ["ci", "cargo-deny", "cargo-audit", "rustsec", "dependencies", "rustls", "pr-164"]
+      "tags": [
+        "ci",
+        "cargo-deny",
+        "cargo-audit",
+        "rustsec",
+        "dependencies",
+        "rustls",
+        "pr-164"
+      ]
+    },
+    {
+      "date": "2026-09-28",
+      "error_message": "Dependabot PRs #173/#174 failed all CodeQL jobs: \"Loaded a configuration file for version '4.38.1', but running version '4.38.0'\"",
+      "root_cause": "codeql-action monorepo sub-actions (init/analyze/upload-sarif) are distinct dependency names; the dependabot.yml group pattern 'github/codeql-action' matched none of them, so the family split into three PRs and any single bump mismatches init vs analyze",
+      "fix": "re-pinned all six github/codeql-action/* refs to v4.38.1 (1c5b675) in one change across codeql/sast/scorecard/build workflows; added 'github/codeql-action/*' to the actions-routine group so the family bumps as one PR",
+      "tags": [
+        "ci",
+        "dependabot",
+        "codeql",
+        "github-actions",
+        "grouping",
+        "pr-173",
+        "pr-174"
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "error_message": "PR #175 kind job: setup_file failed at `out=$(patch_annotation ...)` right after the admission policy applied; 'bats warning: Executed 1 instead of expected 5 tests'",
+      "root_cause": "bats executes setup_file with errexit; the activation poll's probe patch exits non-zero exactly when the policy starts denying (the success condition), so the awaited denial aborted the file at the assignment",
+      "fix": "append `|| true` to the probe assignment (comment marks it load-bearing); all other patch_annotation call sites already use bats `run`",
+      "tags": [
+        "ci",
+        "bats",
+        "errexit",
+        "setup_file",
+        "admission",
+        "pr-175"
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "error_message": "PR #175 kind job round five: setup passes, then tests 1/2 fail the message assertion and tests 4/5 fail their allow assertion; only test 3 passes",
+      "root_cause": "patch_annotation interpolated the value into the patch JSON unescaped; JSON-shaped values like {\"namespace\":\"x\"} broke the patch document, so kubectl exited non-zero with a PARSE error before any request \u2014 deny tests saw the wrong message, allow tests saw a failure; quote-free values (probe-N, deadbeef) worked, masking it in setup and test 3",
+      "fix": "escape embedded quotes in the value (${value//\\\"/\\\\\\\"}) before building the -p document; verified unescaped form fails json.load and escaped form round-trips",
+      "tags": [
+        "ci",
+        "bats",
+        "json",
+        "kubectl-patch",
+        "quoting",
+        "admission",
+        "pr-175"
+      ]
     }
   ]
 }

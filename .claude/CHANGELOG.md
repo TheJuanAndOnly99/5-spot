@@ -9,6 +9,239 @@ The format is based on the regulated environment requirements:
 
 ---
 
+## [2026-09-29 13:05] - Admission deny suite round five: the patch helper broke its own JSON on quoted values
+
+**Author:** Erick Bourgeois
+
+### Changed
+- `.github/scripts/admission-deny.bats`: `patch_annotation` interpolated the
+  annotation value into the `-p` JSON document unescaped, so a JSON-shaped
+  ref value like `{"namespace":"x"}` produced an invalid patch — kubectl
+  exited non-zero on a PARSE error, no request ever sent. The deny tests
+  half-passed (non-zero status, wrong message), the allow tests failed
+  outright, and the quote-free probe (`probe-N`) and applied-hash
+  (`deadbeef`) values sailed through, which is why setup and test 3 were the
+  only green parts. Embedded quotes are now escaped before the document is
+  built.
+
+### Why
+First run where all five tests actually executed (rounds two–four fixed the
+setup); the 4-of-5 failure pattern — both deny tests missing the policy
+message, both allow tests failing, the one quote-free test passing — pointed
+at the helper, not the policy. Verified: the unescaped document fails
+`json.load`, the escaped one round-trips the value exactly.
+
+### Impact
+- [ ] Breaking change
+- [ ] Requires cluster rollout
+- [x] Config change only
+- [ ] Documentation only
+
+---
+
+## [2026-09-29 12:15] - Admission deny suite round four: the awaited denial itself aborted setup_file
+
+**Author:** Erick Bourgeois
+
+### Changed
+- `.github/scripts/admission-deny.bats`: the policy-activation poll assigned
+  `out=$(patch_annotation …)` bare. bats runs `setup_file` under errexit, and
+  the probe *succeeding* is kubectl exiting non-zero — the policy denied the
+  patch — so the first denial aborted the file at that line ("Executed 1
+  instead of expected 5 tests"). The assignment now carries `|| true`, with a
+  comment marking it load-bearing. Every other `patch_annotation` call site
+  already goes through bats' `run`.
+
+### Why
+PR #175's kind job, third distinct setup failure mode: round two's fix (vary
+the probe value) let the poll reach the policy, round three's fix (keep
+kubectl's stderr warning out of the RBAC match) let it reach the probe loop,
+and the loop then died on the exact event it was polling for.
+
+### Impact
+- [ ] Breaking change
+- [ ] Requires cluster rollout
+- [x] Config change only
+- [ ] Documentation only
+
+---
+
+## [2026-09-29 10:20] - Admission deny suite round three: the RBAC probe matched kubectl's warning, not its answer
+
+**Author:** Erick Bourgeois
+
+### Changed
+- `.github/scripts/admission-deny.bats`: the setup's RBAC-readiness poll
+  compared `$(kc auth can-i patch nodes --as=… 2>&1)` against `yes*` — but
+  kubectl prints `Warning: resource 'nodes' is not namespace scoped` on
+  stderr, so with `2>&1` the substitution began with the warning and the glob
+  could never match, even with the grant applied. The job's own failure
+  diagnostics proved it: they printed the warning followed by `yes`. stderr
+  now stays out of the substitution (`2>/dev/null`) and the match is exact
+  (`== "yes"`), with a comment recording the trap.
+
+### Why
+PR #175's `🚫 Policies deny (kind)` job failed in setup with
+"still cannot patch nodes after 30s" although the ClusterRoleBinding had
+applied 33 seconds earlier — the poll was measuring its own stderr capture,
+not the authorization answer.
+
+### Impact
+- [ ] Breaking change
+- [ ] Requires cluster rollout
+- [x] Config change only
+- [ ] Documentation only
+
+---
+
+## [2026-09-29] - Fix the admission deny suite: the probe poisoned itself, and the failure was unreadable
+
+**Author:** Erick Bourgeois
+
+### Fixed
+- `.github/scripts/admission-deny.bats` — **the probe could only ever time
+  out.** The policy fires on a *change* to `5spot.finos.org/kata-config-ref`,
+  and the activation poll patched the same value (`probe`) every attempt. A
+  policy and binding take a few seconds to start enforcing, so attempt 1 landed
+  first and **succeeded**, writing the value; from then on every attempt was a
+  no-op that the policy correctly allowed. The poll therefore reported
+  "policy never became active" for a policy that was working. Each attempt now
+  uses a distinct value (`probe-N`), the annotation is cleared before the poll
+  so the starting state is known, and the probe value is removed afterwards so
+  the tests below still assert on real transitions.
+- Same file — **the suite hid the reason it failed.** The poll discarded
+  `kubectl`'s output, so a 60-second timeout was the only evidence, and the
+  first CI run (run 36511502130) produced no way to tell a broken policy from a
+  broken test. Now:
+  - `kubectl auth can-i patch nodes --as=<agent>` is a **separate, gated
+    assertion** before the probe. An authorization failure and an admission
+    denial are both `Forbidden`; without splitting them, "the policy is not
+    denying" and "the identity could never patch anyway" are indistinguishable.
+  - the policy `apply` has its exit status checked instead of discarded;
+  - `status.typeChecking` is printed if the API server reported any — a CEL
+    expression that fails type-checking applies cleanly and then does not do
+    what it says;
+  - a timeout prints the last probe response and the policy plus binding as the
+    server sees them;
+  - the window is 90s rather than 60s.
+- Same file — `teardown_file` cleanup is `|| :` per command with an explicit
+  `return 0`. bats reported ``kc annotate ... || true' failed with status 0``
+  from teardown on the first run, which added a second, spurious failure to the
+  output and obscured the first.
+- Same file — the ordering dependency between the last two tests (one
+  re-applies the value the other sets) is now stated in a comment, since bats
+  file order is what makes it stable.
+
+### Why
+First real execution of the suite, which the previous entry said would be worth
+watching. Both defects were in the test, not in the policy — the structural unit
+test and the manifest were correct throughout. The lesson worth keeping: a poll
+that asserts on a *state transition* must vary its input, or a single early
+success turns the assertion into a permanent no-op.
+
+### Verification
+`shellcheck` clean; `bats --count` discovers all five tests. Still **not
+executed** here — the suite issues `kubectl apply`, which this project's rules
+prohibit without an explicit request — so CI on PR #175 remains its first real
+run.
+
+### Impact
+- [ ] Breaking change
+- [ ] Requires cluster rollout
+- [x] Config change only
+- [ ] Documentation only
+
+## [2026-09-28 09:45] - Bundle the codeql-action 4.38.1 bumps; fix the group pattern that let them split
+
+**Author:** Erick Bourgeois
+
+### Changed
+- `.github/workflows/{codeql,sast,scorecard,build}.yaml`: all six
+  `github/codeql-action/*` pins bumped together, `v4.38.0` →
+  `v4.38.1` (`b96794f…` → `1c5b675…`) — init, analyze, and the four
+  upload-sarif uses in one change, replacing Dependabot PRs #172/#173/#174.
+- `.github/dependabot.yml`: `actions-routine` group gains
+  `github/codeql-action/*`. The bare `github/codeql-action` pattern never
+  matched the monorepo's sub-action dependency names, so the three bumps
+  escaped the group as separate PRs.
+
+### Why
+Dependabot PRs #173 (init) and #174 (analyze) each failed every CodeQL job
+with `Loaded a configuration file for version '4.38.1', but running version
+'4.38.0'` — CodeQL requires init and analyze at the same version, so the
+family must move in lockstep. #172 (upload-sarif) passed only because its
+workflows don't pair it with init. Bundling matches the repo's existing
+pattern (#151, #164).
+
+### Impact
+- [ ] Breaking change
+- [ ] Requires cluster rollout
+- [x] Config change only
+- [ ] Documentation only
+
+---
+
+## [2026-09-28] - ADR statuses corrected, and the admission policies get a test that proves they deny
+
+**Author:** Erick Bourgeois
+
+### Changed
+- `docs/adr/0012-*.md` and `docs/adr/0013-*.md`: **Proposed → Accepted.** Both
+  are implemented and merged (`ac5ecf5`, and the VAP is on `main`), so the
+  published log was asserting the opposite of the truth — and the Developer
+  Guide tells readers to check the Status line before relying on an ADR.
+  ADR-0011 correctly stays Proposed: no implementation exists. Both index
+  tables updated with them.
+- `docs/adr/0013-*.md`: decision 5 rewritten to name **two** test layers and
+  what each one proves, rather than implying the unit test covers denial.
+- `docs/src/security/admission-validation.md`: a "policy that exists is not a
+  policy that denies" note with the verification commands, since `kubectl get`
+  shows everything present either way.
+
+### Added
+- `.github/scripts/admission-deny.bats`: five behavioural tests against a real
+  API server. Two negative (neither agent may change
+  `5spot.finos.org/kata-config-ref`) and **three positive**, which are the ones
+  that matter for regressions: the kata agent can still write
+  `kata-config-applied` (the restart-loop guard depends on it), a non-agent
+  identity can still set the ref (the controller must not trip its own guard
+  rail), and re-applying an unchanged value is not a change.
+  - The suite **grants the impersonated identities `patch nodes` first**. Without
+    that the request fails at authorization, which is also `Forbidden`, and the
+    test would pass for entirely the wrong reason. It then asserts the policy's
+    own message text and the *absence* of `cannot patch resource`, so the layer
+    that refused is unambiguous.
+  - Policy activation is awaited by polling the behaviour, not a status field:
+    the thing the suite needs to be true is the denial itself.
+- `Makefile`: `kind-verify-admission` (registered in `.PHONY`). Needs no
+  controller image and no CRDs — a bare cluster, the manifests and
+  impersonation — which is what keeps it cheap enough to gate on.
+- `.github/workflows/admission-test.yaml`: runs it on any change under
+  `deploy/admission/`. Installs bats, then calls `make kind-create`,
+  `make kind-verify-admission`, `make kind-delete` — tool install plus Makefile
+  targets only, per `rules/github-workflows.md`, so CI runs exactly what a
+  contributor runs. No third-party action: `kind` comes from `kind-install`,
+  which verifies the download's SHA-256.
+
+### Why
+Every control in the threat model's TB-1 and §6.5 K5 is a
+`ValidatingAdmissionPolicy` whose whole guarantee is one CEL expression, and
+there was no test, in either this repo or banlieue, that any policy actually
+rejects anything. A typo, a wrong `matchConstraint` or an unapplied binding all
+fail **open** and silently. The unit test added with ADR-0013 asserts the
+manifest's shape; that is not the same claim.
+
+### Impact
+- [ ] Breaking change
+- [ ] Requires cluster rollout
+- [x] Config change only
+- [ ] Documentation only
+
+**Not executed here.** The suite is unrun: it issues `kubectl apply`, which this
+project's rules prohibit without an explicit request. `shellcheck` is clean, the
+workflow parses, and the first CI run on a `deploy/admission/` change will be its
+first real execution — worth watching, particularly the 60s activation poll.
+
 ## [2026-09-27] - 5S-02 and 5S-03: the kata-config-ref annotation gets an admission gate; the threat-model pass becomes mandatory
 
 **Author:** Erick Bourgeois
